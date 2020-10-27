@@ -1,0 +1,20 @@
+{
+    "Author": "Andreas M. Botsikas",
+    "ContentSize": 5541,
+    "ContentUrl": "https://raw.githubusercontent.com/azureautomation/backup-azure-api-management-automation-script/master/Backup-AzureAPIM.ps1",
+    "DownloadCount": 1182,
+    "Id": "Backup-Azure-API-2047d0e5",
+    "IsFederated": false,
+    "IsWorkflow": false,
+    "Popularity": 186,
+    "RaterCount": 0,
+    "Rating": 0.0,
+    "ReleaseDate": "2017-11-22T00:00:00",
+    "RunbookKind": 5,
+    "RunbookKindString": "PowerShell",
+    "Summary": "This Azure Automation runbook automates Azure API Management backup to Blob storage and deletes old backups from blob storage. This is a PowerShell runbook, as opposed to a PowerShell Workflow runbook.",
+    "Title": "Backup Azure API Management Automation Script",
+    "UpdatedDate": "2017-11-22T00:00:00",
+    "Url": "https://github.com/azureautomation/backup-azure-api-management-automation-script",
+    "UserTags": "backup, Storage, APIM"
+}
