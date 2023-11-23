@@ -5,8 +5,8 @@
 .DESCRIPTION
 	You should use this Runbook if you want manage Azure API Management backups in Blob storage. 
 	This is a PowerShell runbook, as opposed to a PowerShell Workflow runbook. 
-	It requires AzureRM.ApiManagement module to be installed.
-	The script uses the AzureRunAsConnection connection to login and perform the backup.
+	It requires Az.ApiManagement module to be installed.
+	The script uses the Managed Identity to login and perform the backup.
 
 .PARAMETER ApimResourceGroupName
 	Specifies the name of the resource group where the Azure Api Management instance is located.
@@ -38,7 +38,6 @@
 
 .OUTPUTS
 	Human-readable informational and error messages produced during the job. Not intended to be consumed by another runbook.
-
 #>
 
 param(
@@ -58,42 +57,25 @@ param(
     [Int32]$RetentionDays = 30
 )
 
-$ErrorActionPreference = 'stop'
-
 function Login() {
-	$connectionName = "AzureRunAsConnection"
-	try
-	{
-		Write-Verbose "Acquiring service principal for connection '$connectionName'" -Verbose
-
-		$servicePrincipalConnection = Get-AutomationConnection -Name $connectionName         
-
-		Write-Verbose "Logging in to Azure..." -Verbose
-
-		Add-AzureRmAccount `
-			-ServicePrincipal `
-			-TenantId $servicePrincipalConnection.TenantId `
-			-ApplicationId $servicePrincipalConnection.ApplicationId `
-			-CertificateThumbprint $servicePrincipalConnection.CertificateThumbprint | Out-Null
-	}
-	catch {
-		if (!$servicePrincipalConnection)
-		{
-			$ErrorMessage = "Connection $connectionName not found."
-			throw $ErrorMessage
-		} else{
-			Write-Error -Message $_.Exception
-			throw $_.Exception
-		}
-	}
+    try
+    {
+        Write-Verbose "Logging in to Azure with Managed Identity..." -Verbose
+        Import-Module Az
+        Connect-AzAccount -Identity
+    }
+    catch {
+        Write-Error -Message $_.Exception
+        throw $_.Exception
+    }
 }
 
 function Create-Blob-Container([string]$blobContainerName, $storageContext) {
 	Write-Verbose "Checking if blob container '$blobContainerName' already exists" -Verbose
-	if (Get-AzureStorageContainer -ErrorAction "Stop" -Context $storageContext | Where-Object { $_.Name -eq $blobContainerName }) {
+	if (Get-AzStorageContainer -ErrorAction "Stop" -Context $storageContext | Where-Object { $_.Name -eq $blobContainerName }) {
 		Write-Verbose "Container '$blobContainerName' already exists" -Verbose
 	} else {
-		New-AzureStorageContainer -ErrorAction "Stop" -Name $blobContainerName -Permission Off -Context $storageContext
+		New-AzStorageContainer -ErrorAction "Stop" -Name $blobContainerName -Permission Off -Context $storageContext
 		Write-Verbose "Container '$blobContainerName' created" -Verbose
 	}
 }
@@ -101,10 +83,8 @@ function Create-Blob-Container([string]$blobContainerName, $storageContext) {
 function Backup-To-Blob-Storage([string]$apimResourceGroupName, [string]$apimInstanceName, $storageContext, [string]$blobContainerName, [string]$backupPrefix) {
 
 	$backupBlobName = $backupPrefix + (Get-Date).ToString("yyyyMMddHHmm") + ".bak"
-
 	Write-Verbose "Starting APIM backup to blob '$blobContainerName/$backupBlobName'" -Verbose
-
-	Backup-AzureRmApiManagement -Name $apimInstanceName -ResourceGroupName $apimResourceGroupName -StorageContext $storageContext `
+	Backup-AzApiManagement -Name $apimInstanceName -ResourceGroupName $apimResourceGroupName -StorageContext $storageContext `
                        -TargetContainerName $blobContainerName `
                        -TargetBlobName $backupBlobName
 }
@@ -112,17 +92,16 @@ function Backup-To-Blob-Storage([string]$apimResourceGroupName, [string]$apimIns
 function Delete-Old-Backups([int]$retentionDays, [string]$blobContainerName, $storageContext) {
 	Write-Output "Removing backups older than '$retentionDays' days from container: '$blobContainerName'"
 	$isOldDate = [DateTime]::UtcNow.AddDays(-$retentionDays)
-	$blobs = Get-AzureStorageBlob -Container $blobContainerName -Context $storageContext
+	$blobs = Get-AzStorageBlob -Container $blobContainerName -Context $storageContext
 	foreach ($blob in ($blobs | Where-Object { $_.LastModified.UtcDateTime -lt $isOldDate -and $_.BlobType -eq "BlockBlob" })) {
 		Write-Verbose ("Removing blob: " + $blob.Name) -Verbose
-		Remove-AzureStorageBlob -Blob $blob.Name -Container $blobContainerName -Context $storageContext
+		Remove-AzStorageBlob -Blob $blob.Name -Container $blobContainerName -Context $storageContext
 	}
 }
 
 Write-Verbose "Starting APIM backup" -Verbose
-
 Write-Verbose "Establishing storage context" -Verbose
-$StorageContext = New-AzureStorageContext -StorageAccountName $storageAccountName -StorageAccountKey $StorageAccountKey
+$StorageContext = New-AzStorageContext -StorageAccountName $storageAccountName -StorageAccountKey $StorageAccountKey
 
 Login
 
